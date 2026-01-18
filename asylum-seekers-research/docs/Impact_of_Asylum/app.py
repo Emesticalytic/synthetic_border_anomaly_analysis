@@ -621,8 +621,10 @@ elif page == "📋 Key Findings":
     
     tab1, tab2, tab3 = st.tabs(["Immediate Actions", "Long-term Strategies", "Research Implications"])
     
-    with tab1Prioritize Vulnerable Groups - CRITICAL**
-           - 👶 **Children MUST be given priority** in all services
+    with tab1:
+        st.markdown("""
+        1. **Prioritize Vulnerable Groups - CRITICAL**
+           - **Children MUST be given priority** in all services
            - Expedite asylum processing for families with children
            - Ensure child-friendly spaces and specialized support
            - Protect children from family separation
@@ -676,7 +678,14 @@ elif page == "📋 Key Findings":
            - Facilitate integration programs
            - Build social connections
            - Promote cultural exchange
-        """)Long-term Trauma**: Women asylum seekers experience persistent trauma requiring sustained care
+        """)
+    
+    with tab3:
+        st.markdown("""
+        #### 🔬 Research Implications
+        
+        **Key Findings:**
+        - **Long-term Trauma**: Women asylum seekers experience persistent trauma requiring sustained care
         - **Trauma Persistence**: Effects extend far beyond immediate incident exposure
         - **Children Priority**: Children must receive priority in all protection and support services
         - **Family Vulnerability**: Family separation increases trauma and vulnerability
@@ -691,28 +700,6 @@ elif page == "📋 Key Findings":
         - Cross-cultural comparative analyses
         - Intervention effectiveness evaluations
         - Cost-benefit analyses of protective measures
-        - Family separation impact studies
-        
-        **Critical Priorities for Policy:**
-        1. **Child Protection First**: Children must be prioritized in:
-           - Asylum processing and placement
-           - Access to education and healthcare
-           - Safe housing assignments
-           - Mental health services
-           - Family reunification efforts
-        
-        2. **Long-term Trauma Care**: Recognition that women asylum seekers:
-           - Experience persistent trauma symptoms
-           - Require ongoing mental health support
-           - Need trauma-informed care across all services
-           - Benefit from peer support and survivor networkte safety and long-term integration
-        - **Data-Driven Policy**: Use evidence-based interventions
-        
-        **Future Research Needs:**
-        - Longitudinal studies tracking outcomes over time
-        - Cross-cultural comparative analyses
-        - Intervention effectiveness evaluations
-        - Cost-benefit analyses of protective measures
         """)
     
     st.success("✅ This analysis provides a comprehensive framework for understanding and addressing the vulnerability of women asylum seekers to sexual harassment and its mental health impacts.")
@@ -721,7 +708,7 @@ elif page == "📋 Key Findings":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #7F8C8D;'>
-    <p>© 2026 Women Asylum Seekers Research Project | Built with Streamlit</p>
-    <p>⚠️ Demonstration purposes only - Real research requires IRB approval and ethical safeguards</p>
+    <p>&copy; 2026 Women Asylum Seekers Research Project | Built with Streamlit</p>
+    <p>&#9888; Demonstration purposes only - Real research requires IRB approval and ethical safeguards</p>
 </div>
 """, unsafe_allow_html=True)
