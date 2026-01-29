@@ -1,0 +1,572 @@
+"""
+UK Border Anomaly Detection System
+Interactive Dashboard using Plotly Dash
+
+Run this file to launch the dashboard:
+    python dashboard.py
+
+Then open browser to: http://localhost:8050
+"""
+
+import dash
+from dash import dcc, html, Input, Output, dash_table
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import joblib
+from datetime import datetime
+
+# Load data and models
+print("Loading data and models...")
+
+# Load data - check multiple possible locations
+data_paths = [
+    'data/processed/uk_passengers_features.csv',
+    'outputs/figures/data/processed/uk_passengers_features.csv'
+]
+df = None
+for path in data_paths:
+    try:
+        df = pd.read_csv(path)
+        print(f"✓ Loaded data from: {path}")
+        break
+    except FileNotFoundError:
+        continue
+
+if df is None:
+    raise FileNotFoundError("Could not find uk_passengers_features.csv")
+
+df['arrival_datetime'] = pd.to_datetime(df['arrival_datetime'])
+df['booking_datetime'] = pd.to_datetime(df['booking_datetime'])
+
+# Load models - check multiple possible locations
+model_paths = {
+    'scaler': ['models/scaler.pkl', 'outputs/figures/models/scaler.pkl'],
+    'rf': ['models/random_forest.pkl', 'outputs/figures/models/random_forest.pkl'],
+    'xgb': ['models/xgboost.pkl', 'outputs/figures/models/xgboost.pkl']
+}
+
+scaler = None
+for path in model_paths['scaler']:
+    try:
+        scaler = joblib.load(path)
+        print(f"✓ Loaded scaler from: {path}")
+        break
+    except FileNotFoundError:
+        continue
+
+rf_model = None
+for path in model_paths['rf']:
+    try:
+        rf_model = joblib.load(path)
+        print(f"✓ Loaded RF model from: {path}")
+        break
+    except FileNotFoundError:
+        continue
+
+xgb_model = None
+for path in model_paths['xgb']:
+    try:
+        xgb_model = joblib.load(path)
+        print(f"✓ Loaded XGB model from: {path}")
+        break
+    except FileNotFoundError:
+        continue
+
+# Load feature importance
+importance_paths = [
+    'outputs/reports/feature_importance_rf.csv',
+    'outputs/figures/outputs/reports/feature_importance_rf.csv'
+]
+feature_importance_rf = None
+for path in importance_paths:
+    try:
+        feature_importance_rf = pd.read_csv(path)
+        print(f"✓ Loaded feature importance from: {path}")
+        break
+    except FileNotFoundError:
+        continue
+
+# Load SHAP feature importance
+shap_paths = [
+    'outputs/reports/shap_feature_importance.csv',
+    'outputs/figures/outputs/reports/shap_feature_importance.csv'
+]
+shap_importance = None
+for path in shap_paths:
+    try:
+        shap_importance = pd.read_csv(path)
+        print(f"✓ Loaded SHAP importance from: {path}")
+        break
+    except FileNotFoundError:
+        print("⚠️  SHAP importance not found")
+        continue
+
+# Model performance metrics (from notebook analysis)
+model_metrics = {
+    'Isolation Forest': {'Precision': 0.32, 'Recall': 0.85, 'F1': 0.47, 'ROC-AUC': 0.87},
+    'Random Forest': {'Precision': 0.95, 'Recall': 0.94, 'F1': 0.94, 'ROC-AUC': 0.99},
+    'XGBoost': {'Precision': 0.97, 'Recall': 0.96, 'F1': 0.96, 'ROC-AUC': 0.99},
+    'Autoencoder': {'Precision': 0.89, 'Recall': 0.87, 'F1': 0.88, 'ROC-AUC': 0.93},
+    'LSTM': {'Precision': 0.91, 'Recall': 0.89, 'F1': 0.90, 'ROC-AUC': 0.94}
+}
+
+print("✓ Data and models loaded successfully")
+
+# Initialize Dash app
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app.title = "UK Border Security - Anomaly Detection Dashboard"
+
+# Define colors
+colors = {
+    'background': '#f8f9fa',
+    'text': '#212529',
+    'primary': '#0d6efd',
+    'success': '#198754',
+    'danger': '#dc3545',
+    'warning': '#ffc107',
+    'info': '#0dcaf0'
+}
+
+# ============================================================================
+# DASHBOARD LAYOUT
+# ============================================================================
+
+app.layout = html.Div(style={'backgroundColor': colors['background']}, children=[
+    
+    # Header
+    html.Div([
+        html.H1("🛂 UK Border Security - Anomaly Detection System", 
+                style={'textAlign': 'center', 'color': colors['primary'], 'padding': '20px'}),
+        html.H4("Real-time Passenger Risk Assessment Dashboard | Powered by Deep Learning & ML",
+                style={'textAlign': 'center', 'color': colors['text'], 'marginBottom': '10px'}),
+        html.P("Models: XGBoost, Random Forest, LSTM, Autoencoder, Isolation Forest",
+               style={'textAlign': 'center', 'color': '#6c757d', 'fontSize': '14px', 'marginBottom': '20px'}),
+    ]),
+    
+    # KPI Cards
+    html.Div([
+        html.Div([
+            html.Div([
+                html.H3("Total Passengers", style={'color': colors['text'], 'fontSize': '16px'}),
+                html.H2(f"{len(df):,}", style={'color': colors['primary'], 'margin': '10px 0'}),
+                html.P("Processed", style={'color': '#6c757d', 'fontSize': '14px'})
+            ], style={'backgroundColor': 'white', 'padding': '20px', 'borderRadius': '10px', 
+                     'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'textAlign': 'center'})
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
+        
+        html.Div([
+            html.Div([
+                html.H3("High Risk", style={'color': colors['text'], 'fontSize': '16px'}),
+                html.H2(f"{df['is_anomaly'].sum():,}", style={'color': colors['danger'], 'margin': '10px 0'}),
+                html.P(f"{df['is_anomaly'].mean()*100:.2f}% of total", 
+                      style={'color': '#6c757d', 'fontSize': '14px'})
+            ], style={'backgroundColor': 'white', 'padding': '20px', 'borderRadius': '10px',
+                     'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'textAlign': 'center'})
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
+        
+        html.Div([
+            html.Div([
+                html.H3("Airports", style={'color': colors['text'], 'fontSize': '16px'}),
+                html.H2(f"{df['arrival_airport_code'].nunique()}", 
+                       style={'color': colors['success'], 'margin': '10px 0'}),
+                html.P("Monitored", style={'color': '#6c757d', 'fontSize': '14px'})
+            ], style={'backgroundColor': 'white', 'padding': '20px', 'borderRadius': '10px',
+                     'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'textAlign': 'center'})
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
+        
+        html.Div([
+            html.Div([
+                html.H3("Countries", style={'color': colors['text'], 'fontSize': '16px'}),
+                html.H2(f"{df['origin_country'].nunique()}", 
+                       style={'color': colors['info'], 'margin': '10px 0'}),
+                html.P("Origins", style={'color': '#6c757d', 'fontSize': '14px'})
+            ], style={'backgroundColor': 'white', 'padding': '20px', 'borderRadius': '10px',
+                     'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'textAlign': 'center'})
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '0 1%'}),
+    ], style={'padding': '20px', 'marginBottom': '20px'}),
+    
+    # Filters
+    html.Div([
+        html.Div([
+            html.Label("Select Airport:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.Dropdown(
+                id='airport-filter',
+                options=[{'label': 'All Airports', 'value': 'ALL'}] + 
+                        [{'label': f"{code}", 'value': code} 
+                         for code in sorted(df['arrival_airport_code'].unique())],
+                value='ALL',
+                style={'width': '100%'}
+            )
+        ], style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
+        
+        html.Div([
+            html.Label("Risk Level:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.Dropdown(
+                id='risk-filter',
+                options=[
+                    {'label': 'All Levels', 'value': 'ALL'},
+                    {'label': 'Low Risk', 'value': 'low'},
+                    {'label': 'Medium Risk', 'value': 'medium'},
+                    {'label': 'High Risk', 'value': 'high'}
+                ],
+                value='ALL',
+                style={'width': '100%'}
+            )
+        ], style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
+        
+        html.Div([
+            html.Label("Show Anomalies Only:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+            dcc.RadioItems(
+                id='anomaly-filter',
+                options=[
+                    {'label': ' All Passengers', 'value': 'ALL'},
+                    {'label': ' Anomalies Only', 'value': 'ANOMALY'}
+                ],
+                value='ALL',
+                inline=True,
+                style={'marginTop': '10px'}
+            )
+        ], style={'width': '30%', 'display': 'inline-block', 'padding': '10px'}),
+    ], style={'backgroundColor': 'white', 'padding': '20px', 'margin': '20px', 
+             'borderRadius': '10px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}),
+    
+    # Main visualizations
+    html.Div([
+        # Row 1
+        html.Div([
+            html.Div([
+                dcc.Graph(id='airport-distribution')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+            
+            html.Div([
+                dcc.Graph(id='country-distribution')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+        ]),
+        
+        # Row 2
+        html.Div([
+            html.Div([
+                dcc.Graph(id='temporal-pattern')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+            
+            html.Div([
+                dcc.Graph(id='risk-score-distribution')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+        ]),
+        
+        # Row 3
+        html.Div([
+            html.Div([
+                dcc.Graph(id='feature-importance')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+            
+            html.Div([
+                dcc.Graph(id='booking-lead-time')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+        ]),
+        
+        # Row 4 - Model Comparison and Anomaly Types
+        html.Div([
+            html.Div([
+                dcc.Graph(id='model-comparison')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+            
+            html.Div([
+                dcc.Graph(id='anomaly-types')
+            ], style={'width': '48%', 'display': 'inline-block', 'padding': '10px'}),
+        ]),
+    ], style={'padding': '20px'}),
+    
+    # High Risk Passengers Table
+    html.Div([
+        html.H3("🚨 High Risk Passengers (Sample)", 
+               style={'color': colors['danger'], 'marginBottom': '20px'}),
+        html.Div(id='high-risk-table')
+    ], style={'backgroundColor': 'white', 'padding': '20px', 'margin': '20px',
+             'borderRadius': '10px', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'}),
+    
+    # Footer
+    html.Div([
+        html.Hr(),
+        html.P("UK Border Security Anomaly Detection System | Powered by Machine Learning",
+              style={'textAlign': 'center', 'color': '#6c757d', 'marginTop': '20px'})
+    ])
+])
+
+# ============================================================================
+# CALLBACKS
+# ============================================================================
+
+@app.callback(
+    [Output('airport-distribution', 'figure'),
+     Output('country-distribution', 'figure'),
+     Output('temporal-pattern', 'figure'),
+     Output('risk-score-distribution', 'figure'),
+     Output('feature-importance', 'figure'),
+     Output('booking-lead-time', 'figure'),
+     Output('model-comparison', 'figure'),
+     Output('anomaly-types', 'figure'),
+     Output('high-risk-table', 'children')],
+    [Input('airport-filter', 'value'),
+     Input('risk-filter', 'value'),
+     Input('anomaly-filter', 'value')]
+)
+def update_dashboard(airport, risk_level, anomaly_only):
+    try:
+        # Filter data
+        filtered_df = df.copy()
+        
+        if airport != 'ALL':
+            filtered_df = filtered_df[filtered_df['arrival_airport_code'] == airport]
+        
+        if risk_level != 'ALL' and 'country_risk_level' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['country_risk_level'] == risk_level]
+        
+        if anomaly_only == 'ANOMALY':
+            filtered_df = filtered_df[filtered_df['is_anomaly'] == True]
+        
+        if len(filtered_df) == 0:
+            # Return empty figures if no data
+            empty_fig = go.Figure()
+            empty_fig.add_annotation(text="No data available for selected filters", 
+                                    showarrow=False, font=dict(size=16))
+            return [empty_fig] * 8 + [html.Div("No data available")]
+        
+        # 1. Airport Distribution
+        airport_counts = filtered_df['arrival_airport_code'].value_counts().reset_index()
+        airport_counts.columns = ['airport', 'count']
+        
+        fig_airport = px.bar(
+            airport_counts,
+            x='airport',
+            y='count',
+            title='Passenger Arrivals by Airport',
+            labels={'airport': 'Airport', 'count': 'Number of Passengers'},
+            color='count',
+            color_continuous_scale='Blues'
+        )
+        fig_airport.update_layout(showlegend=False)
+        
+        # 2. Country Distribution (Top 10)
+        country_counts = filtered_df['origin_country'].value_counts().head(10).reset_index()
+        country_counts.columns = ['country', 'count']
+        
+        fig_country = px.bar(
+            country_counts,
+            x='country',
+            y='count',
+            title='Top 10 Origin Countries',
+            labels={'country': 'Country', 'count': 'Number of Passengers'},
+            color='count',
+            color_continuous_scale='Viridis'
+        )
+        fig_country.update_layout(showlegend=False)
+        
+        # 3. Temporal Pattern
+        daily_counts = filtered_df.groupby(filtered_df['arrival_datetime'].dt.date).size().reset_index()
+        daily_counts.columns = ['date', 'count']
+        
+        fig_temporal = px.line(
+            daily_counts,
+            x='date',
+            y='count',
+            title='Daily Arrival Patterns',
+            labels={'date': 'Date', 'count': 'Number of Passengers'},
+            markers=True
+        )
+        
+        # 4. Risk Score Distribution
+        fig_risk = px.histogram(
+            filtered_df,
+            x='basic_risk_score',
+            color='is_anomaly',
+            nbins=30,
+            title='Risk Score Distribution',
+            labels={'basic_risk_score': 'Risk Score', 'is_anomaly': 'Anomaly Status'},
+            barmode='overlay',
+            opacity=0.7,
+            color_discrete_map={True: colors['danger'], False: colors['success']}
+        )
+    
+    # 5. Feature Importance
+    if shap_importance is not None and len(shap_importance) > 0:
+        fig_importance = px.bar(
+            shap_importance.head(15),
+            x='importance',
+            y='feature',
+            orientation='h',
+            title='Top 15 Most Important Features (SHAP)',
+            labels={'importance': 'Importance Score', 'feature': 'Feature'},
+            color='importance',
+            color_continuous_scale='Reds'
+        )
+        fig_importance.update_layout(showlegend=False, yaxis={'categoryorder': 'total ascending'})
+    else:
+        # Fallback: Create feature importance from data
+        numerical_cols = ['booking_lead_days', 'previous_visits', 'previous_overstays', 
+                         'cash_declared_amount', 'basic_risk_score']
+        importance_data = []
+        for col in numerical_cols:
+            if col in filtered_df.columns:
+                importance_data.append({
+                    'feature': col,
+                    'importance': abs(filtered_df[col].corr(filtered_df['is_anomaly']))
+                })
+        
+        if importance_data:
+            importance_df = pd.DataFrame(importance_data).sort_values('importance', ascending=True)
+            fig_importance = px.bar(
+                importance_df,
+                x='importance',
+                y='feature',
+                orientation='h',
+                title='Feature Correlations with Anomaly Status',
+                labels={'importance': 'Correlation', 'feature': 'Feature'},
+                color='importance',
+                color_continuous_scale='Reds'
+            )
+            fig_importance.update_layout(showlegend=False, yaxis={'categoryorder': 'total ascending'})
+        else:
+            fig_importance = go.Figure()
+            fig_importance.add_annotation(text="Feature importance data not available", 
+                                        showarrow=False, font=dict(size=16))
+    
+    # 6. Booking Lead Time
+    fig_booking = px.box(
+        filtered_df,
+        x='is_anomaly',
+        y='booking_lead_days',
+        title='Booking Lead Time: Normal vs Anomaly',
+        labels={'is_anomaly': 'Anomaly Status', 'booking_lead_days': 'Days Before Arrival'},
+        color='is_anomaly',
+        color_discrete_map={True: colors['danger'], False: colors['success']}
+    )
+    
+    # 7. High Risk Table
+    high_risk_df = filtered_df[filtered_df['is_anomaly'] == True].head(10)
+    
+    # Select columns that exist in the dataframe
+    available_cols = ['passenger_id', 'origin_country', 'arrival_airport_code', 
+                     'arrival_datetime', 'booking_lead_days', 'basic_risk_score']
+    if 'anomaly_type' in filtered_df.columns:
+        available_cols.append('anomaly_type')
+    
+    # Filter to only existing columns
+    existing_cols = [col for col in available_cols if col in high_risk_df.columns]
+    high_risk_df = high_risk_df[existing_cols].copy()
+    
+    # Format datetime and risk score
+    if 'arrival_datetime' in high_risk_df.columns:
+        high_risk_df['arrival_datetime'] = high_risk_df['arrival_datetime'].dt.strftime('%Y-%m-%d %H:%M')
+    if 'basic_risk_score' in high_risk_df.columns:
+        high_risk_df['basic_risk_score'] = high_risk_df['basic_risk_score'].round(2)
+    
+    table = dash_table.DataTable(
+        data=high_risk_df.to_dict('records'),
+        columns=[{'name': col, 'id': col} for col in high_risk_df.columns],
+        style_cell={
+            'textAlign': 'left',
+            'padding': '10px',
+            'fontFamily': 'Arial'
+        },
+        style_header={
+            'backgroundColor': colors['danger'],
+            'color': 'white',
+            'fontWeight': 'bold'
+        },
+        style_data_conditional=[
+            {
+                'if': {'row_index': 'odd'},
+                'backgroundColor': '#f8f9fa'
+            }
+        ],
+        page_size=10
+    )
+    
+    # 8. Model Performance Comparison
+    models_df = pd.DataFrame.from_dict(model_metrics, orient='index').reset_index()
+    models_df.columns = ['Model', 'Precision', 'Recall', 'F1-Score', 'ROC-AUC']
+    
+    fig_models = go.Figure()
+    
+    metrics = ['Precision', 'Recall', 'F1-Score', 'ROC-AUC']
+    colors_metrics = ['#0d6efd', '#198754', '#ffc107', '#dc3545']
+    
+    for metric, color in zip(metrics, colors_metrics):
+        fig_models.add_trace(go.Bar(
+            name=metric,
+            x=models_df['Model'],
+            y=models_df[metric],
+            marker_color=color
+        ))
+    
+    fig_models.update_layout(
+        title='ML Models Performance Comparison',
+        xaxis_title='Model',
+        yaxis_title='Score',
+        barmode='group',
+        yaxis=dict(range=[0, 1.05]),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+        height=400
+    )
+    
+    # 9. Anomaly Types Distribution
+    anomaly_df = filtered_df[filtered_df['is_anomaly'] == True]
+    
+    if 'anomaly_type' in anomaly_df.columns and len(anomaly_df) > 0:
+        anomaly_types = anomaly_df['anomaly_type'].value_counts().reset_index()
+        anomaly_types.columns = ['type', 'count']
+        
+        fig_anomaly_types = px.pie(
+            anomaly_types,
+            values='count',
+            names='type',
+            title='Distribution of Anomaly Types',
+            color_discrete_sequence=px.colors.qualitative.Set3,
+            hole=0.4
+        )
+        fig_anomaly_types.update_traces(textposition='inside', textinfo='percent+label')
+    else:
+        # Fallback: Show anomaly distribution by risk level
+        if 'country_risk_level' in anomaly_df.columns and len(anomaly_df) > 0:
+            risk_dist = anomaly_df['country_risk_level'].value_counts().reset_index()
+            risk_dist.columns = ['Risk Level', 'count']
+            
+            fig_anomaly_types = px.pie(
+                risk_dist,
+                values='count',
+                names='Risk Level',
+                title='Anomalies by Risk Level',
+                color_discrete_sequence=px.colors.qualitative.Set3,
+                hole=0.4
+            )
+            fig_anomaly_types.update_traces(textposition='inside', textinfo='percent+label')
+        else:
+            fig_anomaly_types = go.Figure()
+            fig_anomaly_types.add_annotation(text="No anomaly type data available", 
+                                            showarrow=False, font=dict(size=16))
+    
+        return fig_airport, fig_country, fig_temporal, fig_risk, fig_importance, fig_booking, fig_models, fig_anomaly_types, table
+    
+    except Exception as e:
+        # Error handling - return error message
+        error_fig = go.Figure()
+        error_fig.add_annotation(text=f"Error: {str(e)}", showarrow=False, font=dict(size=14, color='red'))
+        print(f"Dashboard callback error: {str(e)}")
+        return [error_fig] * 8 + [html.Div(f"Error loading data: {str(e)}", style={'color': 'red'})]
+
+# ============================================================================
+# RUN SERVER
+# ============================================================================
+
+if __name__ == '__main__':
+    print("\n" + "=" * 80)
+    print("STARTING UK BORDER ANOMALY DETECTION DASHBOARD")
+    print("=" * 80)
+    print("\n✓ Dashboard is running at: http://localhost:8050")
+    print("\nPress Ctrl+C to stop the server\n")
+    print("=" * 80)
+    
+    app.run(debug=True, port=8050)
